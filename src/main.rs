@@ -1,7 +1,5 @@
 #![feature(let_chains)]
 
-use std::ops::{Add, Sub};
-
 use bevy::{prelude::*, render::camera::Camera};
 
 #[derive(Default)]
@@ -23,6 +21,7 @@ fn main() {
 }
 
 fn setup(mut cmds: Commands, mut materials: ResMut<Assets<ColorMaterial>>) {
+    // Player
     cmds.spawn_bundle(SpriteBundle {
         material: materials.add(Color::rgb(1.0, 0.0, 1.0).into()),
         sprite: Sprite::new(20.0 * Vec2::ONE),
@@ -31,6 +30,7 @@ fn setup(mut cmds: Commands, mut materials: ResMut<Assets<ColorMaterial>>) {
     .insert(Velocity::default())
     .insert(Player::Start);
 
+    // Camera
     cmds.spawn_bundle(OrthographicCameraBundle::new_2d());
 }
 
@@ -66,8 +66,7 @@ fn handle_movement(
             y += 1.0;
         }
 
-        tran.translation.x += WALK_SPEED * time.delta_seconds() * x;
-        tran.translation.y += WALK_SPEED * time.delta_seconds() * y;
+        tran.translation += WALK_SPEED * time.delta_seconds() * Vec3::new(x, y, 0.0);
     }
 }
 
@@ -79,26 +78,26 @@ fn handle_start_shot(
     camera: Query<&Transform, With<Camera>>,
     mut query: Query<(&Transform, &mut Player)>,
 ) {
-    // no let-chains yet
-    if let Ok((trans, mut player)) = query.single_mut() {
-        if let Player::Start = *player && mouse_input.just_pressed(MouseButton::Left) {
-            // the game starts now
-            *player = Player::Game;
+    if let Ok((player_trans, mut player)) = query.single_mut()
+    && let Player::Start = *player 
+    && mouse_input.just_pressed(MouseButton::Left) {
+        // the real game starts now
+        *player = Player::Game;
 
-            let window = windows.get_primary().expect("no primary window");
-            let curs_pos = window.cursor_position().expect("no cursor");
-            let curs_pos = screen_to_world(curs_pos, window, camera);
+        let window = windows.get_primary().expect("no primary window");
+        let curs_pos = window.cursor_position().expect("no cursor");
+        let curs_pos = screen_to_world(curs_pos, window, camera);
 
-            let dir = curs_pos - trans.translation.into();
+        let dir = curs_pos - player_trans.translation.into();
+        let proj_vel = PROJECTILE_SPEED * dir.normalize();
 
-            cmds.spawn_bundle(SpriteBundle {
-                sprite: Sprite::new(30.0 * Vec2::ONE),
-                material: colors.add(Color::rgb(1.0, 0.0, 0.0).into()),
-                transform: *trans,
-                ..Default::default()
-            })
-            .insert(Velocity(PROJECTILE_SPEED * dir.normalize()));
-        }
+        cmds.spawn_bundle(SpriteBundle {
+            sprite: Sprite::new(10.0 * Vec2::ONE),
+            material: colors.add(Color::rgb(1.0, 0.0, 0.0).into()),
+            transform: *player_trans,
+            ..Default::default()
+        })
+        .insert(Velocity(proj_vel));
     }
 }
 

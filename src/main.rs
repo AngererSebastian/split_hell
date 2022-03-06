@@ -2,6 +2,7 @@
 
 mod collider;
 use std::f32::consts::PI;
+use std::time::Duration;
 
 use bevy::math::const_vec2;
 use bevy::{prelude::*, render::camera::Camera};
@@ -13,7 +14,7 @@ struct Velocity(Vec2);
 #[derive(Component, Debug)]
 struct Obstacle;
 #[derive(Component, Debug)]
-struct Bullet;
+struct Bullet(Timer);
 
 #[derive(Component, Debug)]
 enum Player {
@@ -22,16 +23,18 @@ enum Player {
 }
 
 const BULLET_SIZE: Vec2 = const_vec2!([10.0, 10.0]);
+const BULLET_ACTIVATION_TIME: Duration = Duration::from_millis(180);
 
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
-        .add_startup_system(setup.system())
-        .add_system(handle_movement.system())
-        .add_system(move_transform.system())
-        .add_system(handle_start_shot.system())
-        .add_system(bullet_collide.system())
-        .add_system(bullet_hits_player.system())
+        .add_startup_system(setup)
+        .add_system(handle_movement)
+        .add_system(move_transform)
+        .add_system(handle_start_shot)
+        .add_system(bullet_collide)
+        .add_system(bullet_hits_player)
+        .add_system(advance_bullet_time)
         .run();
 }
 
@@ -46,8 +49,16 @@ fn spawn_bullet(cmds: &mut Commands, vel: Velocity, transform: Transform) {
         ..Default::default()
     })
     .insert(Collider::rectangle(BULLET_SIZE))
-    .insert(Bullet)
+    .insert(Bullet(Timer::new(BULLET_ACTIVATION_TIME, false)))
     .insert(vel);
+}
+
+fn advance_bullet_time(time: Res<Time>, mut bullets: Query<&mut Bullet>) {
+    let elapsed = time.delta();
+
+    bullets.for_each_mut(|mut b| {
+        b.0.tick(elapsed);
+    })
 }
 
 fn setup(mut cmds: Commands) {
@@ -85,10 +96,15 @@ fn setup(mut cmds: Commands) {
 
 fn bullet_collide(
     mut cmds: Commands,
-    mut bullets: Query<(&mut Velocity, &Transform, &Collider), (With<Bullet>, Without<Obstacle>)>,
+    mut bullets: Query<(&mut Velocity, &Transform, &mut Bullet, &Collider), Without<Obstacle>>,
     obstacles: Query<(&Collider, &Transform), (With<Obstacle>, Without<Bullet>)>,
 ) {
-    bullets.for_each_mut(|(mut vel, bul_trans, bul_col)| {
+    bullets.for_each_mut(|(mut vel, bul_trans, mut bullet, bul_col)| {
+        // wait a certain time before detecting collisions
+        if !bullet.0.finished() {
+            return;
+        }
+
         let collision = obstacles
             .iter()
             .filter_map(|obstacle| collider::are_colliding((bul_col, &bul_trans), obstacle))
@@ -102,6 +118,7 @@ fn bullet_collide(
             let co_angle = PI - angle;
 
             vel.0 = vector_at_angle(vel_magnitude, angle);
+            bullet.0.reset(); // reset timer
             let vel = Velocity(vector_at_angle(vel_magnitude, co_angle));
 
             spawn_bullet(&mut cmds, vel, *bul_trans);
@@ -115,14 +132,14 @@ fn vector_at_angle(magnitude: f32, angle: f32) -> Vec2 {
 
 fn bullet_hits_player(
     player: Query<(&Collider, &Transform), With<Player>>,
-    bullets: Query<(&Collider, &Transform), With<Bullet>>,
+    bullets: Query<(&Collider, &Transform, &Bullet)>,
 ) {
     // there is only one player (for now)
     let player = player.single();
 
-    let hit = bullets
-        .iter()
-        .any(|bullet| collider::are_colliding(bullet, player).is_some());
+    let hit = bullets.iter().any(|(col, trans, bullet)| {
+        bullet.0.finished() && collider::are_colliding((col, trans), player).is_some()
+    });
 
     // TODO: create a delay before the bullet can kill
     if hit {

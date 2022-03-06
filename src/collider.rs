@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use itertools::Itertools;
+use itertools::{Iterate, Itertools};
 
 #[derive(Component, Debug, Default)]
 pub struct Collider(pub Vec<Vec2>);
@@ -21,18 +21,41 @@ impl Collider {
     }
 }
 
+// TODO: look why things are sometimes not colliding (transformations)
 pub fn are_colliding(
     (col_a, trans_a): (&Collider, &Transform),
     (col_b, trans_b): (&Collider, &Transform),
-) -> bool {
+) -> Option<(Vec2, f32)> {
     let points_a = points_to_world(&col_a.0, trans_a);
     let points_b = points_to_world(&col_b.0, trans_b);
 
     let edges_a: Vec<_> = edges_between(&points_a).collect();
     let edges_b: Vec<_> = edges_between(&points_b).collect();
 
-    are_projs_overlapping(edges_a.into_iter(), &points_a, &points_b)
-        && are_projs_overlapping(edges_b.into_iter(), &points_a, &points_b)
+    let mut overlaps = get_overlaps(edges_a.into_iter(), &points_a, &points_b).chain(get_overlaps(
+        edges_b.into_iter(),
+        &points_a,
+        &points_b,
+    ));
+
+    let first = overlaps.next().expect("oneagon?");
+
+    overlaps.fold(
+        Some(first),
+        |min_overlap: Option<(Vec2, f32)>, (axis, overlap)| {
+            if overlap < 0.0 {
+                None
+            } else {
+                min_overlap.map(|(back_axis, min_ov)| {
+                    if min_ov > overlap {
+                        (axis, overlap)
+                    } else {
+                        (back_axis, min_ov)
+                    }
+                })
+            }
+        },
+    )
 }
 
 fn points_to_world(ps: &[Vec2], trans: &Transform) -> Vec<Vec2> {
@@ -52,16 +75,25 @@ fn edges_between(ps: &[Vec2]) -> impl Iterator<Item = Vec2> + '_ {
     })
 }
 
-fn are_projs_overlapping<I: Iterator<Item = Vec2>>(
-    mut edges: I,
-    points_a: &[Vec2],
-    points_b: &[Vec2],
-) -> bool {
-    edges.all(|e| {
+fn get_overlaps<'a, I: Iterator<Item = Vec2> + 'a>(
+    edges: I,
+    points_a: &'a [Vec2],
+    points_b: &'a [Vec2],
+) -> impl Iterator<Item = (Vec2, f32)> + 'a {
+    edges.map(move |e| {
+        let e = e.perp().normalize();
         let (a_min, a_max) = projection_bounds(e, &points_a);
         let (b_min, b_max) = projection_bounds(e, &points_b);
 
-        a_min <= b_max && a_max >= b_min
+        //a_min <= b_max && a_max >= b_min
+
+        let overlap = if a_min < b_max {
+            a_max - b_min
+        } else {
+            b_max - a_min
+        };
+
+        (e, overlap)
     })
 }
 
@@ -69,7 +101,7 @@ fn projection_bounds(edge: Vec2, ps: &[Vec2]) -> (f32, f32) {
     ps.iter()
         .map(|p| {
             // perpendicular of edge and then the dot product with p
-            edge.perp_dot(*p)
+            edge.dot(*p)
         })
         .minmax()
         .into_option()

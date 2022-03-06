@@ -71,12 +71,13 @@ fn bullet_collide(
     obstacles: Query<(&Collider, &Transform), (With<Obstacle>, Without<Bullet>)>,
 ) {
     bullets.for_each_mut(|(vel, bul_trans, bul_col, material)| {
-        let colliding = obstacles
+        let colliding: Vec<_> = obstacles
             .iter()
-            .any(|obstacle| collider::are_colliding((bul_col, &bul_trans), obstacle));
+            .filter_map(|obstacle| collider::are_colliding((bul_col, &bul_trans), obstacle))
+            .collect();
 
-        if colliding {
-            println!("Colliding!");
+        if !colliding.is_empty() {
+            println!("Colliding! {:?}", colliding);
         }
     })
 }
@@ -90,7 +91,7 @@ fn bullet_hits_player(
 
     let hit = bullets
         .iter()
-        .any(|bullet| collider::are_colliding(bullet, player));
+        .any(|bullet| collider::are_colliding(bullet, player).is_some());
 
     // TODO: create a delay before the bullet can kill
     if hit {
@@ -141,7 +142,7 @@ fn handle_start_shot(
     mut query: Query<(&Transform, &mut Player)>,
 ) {
     if let (player_trans, mut player) = query.single_mut()
-    && let Player::Start = *player
+    //&& let Player::Start = *player
     && mouse_input.just_pressed(MouseButton::Left) {
         // the real game starts now
         *player = Player::Game;

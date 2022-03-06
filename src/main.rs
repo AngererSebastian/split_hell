@@ -42,7 +42,7 @@ fn setup(mut cmds: Commands) {
         ..Default::default()
     })
     .insert(Velocity::default())
-    .insert(Collider::rectangle(Vec2::ZERO, player_size))
+    .insert(Collider::rectangle(player_size))
     .insert(Player::Start);
 
     //obstacle
@@ -53,10 +53,10 @@ fn setup(mut cmds: Commands) {
             custom_size: Some(obstacle_size),
             ..Default::default()
         },
-        transform: Transform::from_xyz(40.0, 0.0, 1.0),
+        transform: Transform::from_translation(Vec3::new(40.0, 0.0, 1.0)),
         ..Default::default()
     })
-    .insert(Collider::rectangle(Vec2::ZERO, obstacle_size))
+    .insert(Collider::rectangle(obstacle_size))
     .insert(Obstacle);
 
     // Camera
@@ -164,7 +164,7 @@ fn handle_start_shot(
             transform: *player_trans,
             ..Default::default()
         })
-        .insert(Collider::rectangle(Vec2::ZERO, bullet_size))
+        .insert(Collider::rectangle(bullet_size))
         .insert(Bullet)
         .insert(Velocity(proj_vel));
     }

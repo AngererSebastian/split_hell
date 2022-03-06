@@ -1,6 +1,9 @@
 #![feature(let_chains)]
 
 mod collider;
+use std::f32::consts::PI;
+
+use bevy::math::const_vec2;
 use bevy::{prelude::*, render::camera::Camera};
 use collider::Collider;
 
@@ -18,6 +21,8 @@ enum Player {
     Game,
 }
 
+const BULLET_SIZE: Vec2 = const_vec2!([10.0, 10.0]);
+
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
@@ -28,6 +33,21 @@ fn main() {
         .add_system(bullet_collide.system())
         .add_system(bullet_hits_player.system())
         .run();
+}
+
+fn spawn_bullet(cmds: &mut Commands, vel: Velocity, transform: Transform) {
+    cmds.spawn_bundle(SpriteBundle {
+        sprite: Sprite {
+            color: Color::BLACK,
+            custom_size: Some(BULLET_SIZE),
+            ..Default::default()
+        },
+        transform,
+        ..Default::default()
+    })
+    .insert(Collider::rectangle(BULLET_SIZE))
+    .insert(Bullet)
+    .insert(vel);
 }
 
 fn setup(mut cmds: Commands) {
@@ -64,22 +84,33 @@ fn setup(mut cmds: Commands) {
 }
 
 fn bullet_collide(
-    mut bullets: Query<
-        (&mut Velocity, &mut Transform, &Collider, &Sprite),
-        (With<Bullet>, Without<Obstacle>),
-    >,
+    mut cmds: Commands,
+    mut bullets: Query<(&mut Velocity, &Transform, &Collider), (With<Bullet>, Without<Obstacle>)>,
     obstacles: Query<(&Collider, &Transform), (With<Obstacle>, Without<Bullet>)>,
 ) {
-    bullets.for_each_mut(|(vel, bul_trans, bul_col, material)| {
-        let colliding: Vec<_> = obstacles
+    bullets.for_each_mut(|(mut vel, bul_trans, bul_col)| {
+        let collision = obstacles
             .iter()
             .filter_map(|obstacle| collider::are_colliding((bul_col, &bul_trans), obstacle))
-            .collect();
+            .next();
 
-        if !colliding.is_empty() {
-            println!("Colliding! {:?}", colliding);
+        // TODO: maybe add a spawn delay
+        if let Some((norm, _)) = collision {
+            let vel_magnitude = vel.0.length();
+            let side = norm.perp();
+            let angle = vel.0.angle_between(side);
+            let co_angle = PI - angle;
+
+            vel.0 = vector_at_angle(vel_magnitude, angle);
+            let vel = Velocity(vector_at_angle(vel_magnitude, co_angle));
+
+            spawn_bullet(&mut cmds, vel, *bul_trans);
         }
     })
+}
+
+fn vector_at_angle(magnitude: f32, angle: f32) -> Vec2 {
+    magnitude * Vec2::new(angle.cos(), angle.sin())
 }
 
 fn bullet_hits_player(
@@ -154,19 +185,7 @@ fn handle_start_shot(
         let dir = curs_pos - player_trans.translation.truncate();
         let proj_vel = PROJECTILE_SPEED * dir.normalize();
 
-        let bullet_size = 10.0 * Vec2::ONE;
-        cmds.spawn_bundle(SpriteBundle {
-            sprite: Sprite {
-                color: Color::BLACK,
-                custom_size: Some(bullet_size),
-                ..Default::default()
-            },
-            transform: *player_trans,
-            ..Default::default()
-        })
-        .insert(Collider::rectangle(bullet_size))
-        .insert(Bullet)
-        .insert(Velocity(proj_vel));
+        spawn_bullet(&mut cmds, Velocity(proj_vel), *player_trans);
     }
 }
 

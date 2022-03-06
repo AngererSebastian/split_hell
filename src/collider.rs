@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 use itertools::Itertools;
 
+#[derive(Component, Debug, Default)]
 pub struct Collider(pub Vec<Vec2>);
 
 impl Collider {
@@ -15,7 +16,7 @@ impl Collider {
         Self(points)
     }
 
-    pub fn triangle(p1: Vec2, p2: Vec2, p3: Vec2) -> Self {
+    pub fn _triangle(p1: Vec2, p2: Vec2, p3: Vec2) -> Self {
         Self(vec![p1, p2, p3])
     }
 }

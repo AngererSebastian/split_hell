@@ -4,34 +4,41 @@ mod collider;
 use bevy::{prelude::*, render::camera::Camera};
 use collider::Collider;
 
-#[derive(Default)]
+#[derive(Component, Debug, Default)]
 struct Velocity(Vec2);
 
+#[derive(Component, Debug)]
 struct Obstacle;
+#[derive(Component, Debug)]
 struct Bullet;
 
+#[derive(Component, Debug)]
 enum Player {
     Start,
     Game,
 }
 
 fn main() {
-    App::build()
+    App::new()
         .add_plugins(DefaultPlugins)
         .add_startup_system(setup.system())
         .add_system(handle_movement.system())
         .add_system(move_transform.system())
         .add_system(handle_start_shot.system())
         .add_system(bullet_collide.system())
+        .add_system(bullet_hits_player.system())
         .run();
 }
 
-fn setup(mut cmds: Commands, mut materials: ResMut<Assets<ColorMaterial>>) {
+fn setup(mut cmds: Commands) {
     // Player
     let player_size = 20.0 * Vec2::ONE;
     cmds.spawn_bundle(SpriteBundle {
-        material: materials.add(Color::rgb(1.0, 0.0, 1.0).into()),
-        sprite: Sprite::new(player_size),
+        sprite: Sprite {
+            color: Color::rgb(1.0, 0.0, 1.0),
+            custom_size: Some(player_size),
+            ..Default::default()
+        },
         ..Default::default()
     })
     .insert(Velocity::default())
@@ -41,8 +48,11 @@ fn setup(mut cmds: Commands, mut materials: ResMut<Assets<ColorMaterial>>) {
     //obstacle
     let obstacle_size = Vec2::new(20.0, 100.0);
     cmds.spawn_bundle(SpriteBundle {
-        material: materials.add(Color::rgb(0.0, 1.0, 0.0).into()),
-        sprite: Sprite::new(obstacle_size),
+        sprite: Sprite {
+            color: Color::rgb(0.0, 1.0, 0.0),
+            custom_size: Some(obstacle_size),
+            ..Default::default()
+        },
         transform: Transform::from_xyz(40.0, 0.0, 1.0),
         ..Default::default()
     })
@@ -54,28 +64,41 @@ fn setup(mut cmds: Commands, mut materials: ResMut<Assets<ColorMaterial>>) {
 }
 
 fn bullet_collide(
-    mut materials: ResMut<Assets<ColorMaterial>>,
-    bullets: Query<(&Velocity, &Transform, &Collider), With<Bullet>>,
-    obstacles: Query<(&Collider, &Transform, &Handle<ColorMaterial>), With<Obstacle>>,
+    mut bullets: Query<
+        (&mut Velocity, &mut Transform, &Collider, &Sprite),
+        (With<Bullet>, Without<Obstacle>),
+    >,
+    obstacles: Query<(&Collider, &Transform), (With<Obstacle>, Without<Bullet>)>,
 ) {
-    obstacles.for_each(|(obs_col, obs_trans, handle)| {
-        // is any bullet colliding
-        let colliding = bullets.iter().any(|(_, bullet_trans, bul_collider)| {
-            collider::are_colliding((bul_collider, bullet_trans), (obs_col, obs_trans))
-        });
+    bullets.for_each_mut(|(vel, bul_trans, bul_col, material)| {
+        let colliding = obstacles
+            .iter()
+            .any(|obstacle| collider::are_colliding((bul_col, &bul_trans), obstacle));
 
-        let material = materials.get_mut(handle).unwrap();
-
-        // change the color if it's colliding
-        material.color = if colliding {
-            Color::CRIMSON
-        } else {
-            Color::rgb(1.0, 0.0, 1.0)
+        if colliding {
+            println!("Colliding!");
         }
     })
 }
 
-fn move_transform(time: Res<Time>, query: Query<(&Velocity, &mut Transform)>) {
+fn bullet_hits_player(
+    player: Query<(&Collider, &Transform), With<Player>>,
+    bullets: Query<(&Collider, &Transform), With<Bullet>>,
+) {
+    // there is only one player (for now)
+    let player = player.single();
+
+    let hit = bullets
+        .iter()
+        .any(|bullet| collider::are_colliding(bullet, player));
+
+    // TODO: create a delay before the bullet can kill
+    if hit {
+        println!("hit!! call an ambulance");
+    }
+}
+
+fn move_transform(time: Res<Time>, mut query: Query<(&Velocity, &mut Transform)>) {
     query.for_each_mut(|(v, mut t)| {
         t.translation.x += v.0.x * time.delta_seconds();
         t.translation.y += v.0.y * time.delta_seconds();
@@ -90,36 +113,34 @@ fn handle_movement(
     keyboard: Res<Input<KeyCode>>,
     mut query: Query<&mut Transform, With<Player>>,
 ) {
-    if let Ok(mut tran) = query.single_mut() {
-        let mut x = 0.0;
-        let mut y = 0.0;
+    let mut tran = query.single_mut();
+    let mut x = 0.0;
+    let mut y = 0.0;
 
-        if keyboard.pressed(KeyCode::A) {
-            x -= 1.0;
-        }
-        if keyboard.pressed(KeyCode::D) {
-            x += 1.0;
-        }
-        if keyboard.pressed(KeyCode::S) {
-            y -= 1.0;
-        }
-        if keyboard.pressed(KeyCode::W) {
-            y += 1.0;
-        }
-
-        tran.translation += WALK_SPEED * time.delta_seconds() * Vec3::new(x, y, 0.0);
+    if keyboard.pressed(KeyCode::A) {
+        x -= 1.0;
     }
+    if keyboard.pressed(KeyCode::D) {
+        x += 1.0;
+    }
+    if keyboard.pressed(KeyCode::S) {
+        y -= 1.0;
+    }
+    if keyboard.pressed(KeyCode::W) {
+        y += 1.0;
+    }
+
+    tran.translation += WALK_SPEED * time.delta_seconds() * Vec3::new(x, y, 0.0);
 }
 
 fn handle_start_shot(
     mut cmds: Commands,
-    mut colors: ResMut<Assets<ColorMaterial>>,
     mouse_input: Res<Input<MouseButton>>,
     windows: Res<Windows>,
     camera: Query<&Transform, With<Camera>>,
     mut query: Query<(&Transform, &mut Player)>,
 ) {
-    if let Ok((player_trans, mut player)) = query.single_mut()
+    if let (player_trans, mut player) = query.single_mut()
     && let Player::Start = *player
     && mouse_input.just_pressed(MouseButton::Left) {
         // the real game starts now
@@ -129,13 +150,16 @@ fn handle_start_shot(
         let curs_pos = window.cursor_position().expect("no cursor");
         let curs_pos = screen_to_world(curs_pos, window, camera);
 
-        let dir = curs_pos - player_trans.translation.into();
+        let dir = curs_pos - player_trans.translation.truncate();
         let proj_vel = PROJECTILE_SPEED * dir.normalize();
 
         let bullet_size = 10.0 * Vec2::ONE;
         cmds.spawn_bundle(SpriteBundle {
-            sprite: Sprite::new(10.0 * Vec2::ONE),
-            material: colors.add(Color::BLACK.into()),
+            sprite: Sprite {
+                color: Color::BLACK,
+                custom_size: Some(bullet_size),
+                ..Default::default()
+            },
             transform: *player_trans,
             ..Default::default()
         })
@@ -150,7 +174,7 @@ fn screen_to_world(screen: Vec2, window: &Window, camera: Query<&Transform, With
 
     let pos = screen - (w_size / 2.0);
 
-    let transform_matrix = camera.single().unwrap().compute_matrix();
+    let transform_matrix = camera.single().compute_matrix();
 
     let world = transform_matrix * pos.extend(0.0).extend(1.0);
 

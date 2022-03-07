@@ -17,16 +17,12 @@ pub fn _vector_at_angle(magnitude: f32, angle: f32) -> Vec2 {
 }
 
 /// converts Screen coordinates to world coordinates
-pub fn screen_to_world(
-    screen: Vec2,
-    window: &Window,
-    camera: Query<&Transform, With<Camera>>,
-) -> Vec2 {
+pub fn screen_to_world(screen: Vec2, window: &Window, camera: &Transform) -> Vec2 {
     let w_size = Vec2::new(window.width() as f32, window.height() as f32);
 
     let pos = screen - (w_size / 2.0);
 
-    let transform_matrix = camera.single().compute_matrix();
+    let transform_matrix = camera.compute_matrix();
 
     let world = transform_matrix * pos.extend(0.0).extend(1.0);
 

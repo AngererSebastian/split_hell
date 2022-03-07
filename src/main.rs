@@ -45,6 +45,7 @@ fn main() {
         .add_event::<BulletSpawn>()
         .add_startup_system(setup)
         .add_system(handle_movement)
+        .add_system(handle_player_looking)
         .add_system(move_transform)
         .add_system(handle_start_shot)
         .add_system(bullet_collide)
@@ -237,40 +238,53 @@ fn handle_movement(
     let mut y = 0.0;
 
     if keyboard.pressed(KeyCode::A) {
-        x -= 1.0;
-    }
-    if keyboard.pressed(KeyCode::D) {
-        x += 1.0;
-    }
-    if keyboard.pressed(KeyCode::S) {
         y -= 1.0;
     }
-    if keyboard.pressed(KeyCode::W) {
+    if keyboard.pressed(KeyCode::D) {
         y += 1.0;
     }
+    if keyboard.pressed(KeyCode::S) {
+        x -= 1.0;
+    }
+    if keyboard.pressed(KeyCode::W) {
+        x += 1.0;
+    }
 
-    tran.translation += WALK_SPEED * time.delta_seconds() * Vec3::new(x, y, 0.0);
+    let movement_dir = tran.rotation * Vec3::new(x, y, 0.0);
+    tran.translation += WALK_SPEED * time.delta_seconds() * movement_dir;
+}
+
+fn handle_player_looking(
+    windows: Res<Windows>,
+    camera: Query<&Transform, (With<Camera>, Without<Player>)>,
+    mut player: Query<&mut Transform, With<Player>>,
+) {
+    let mut player = player.single_mut();
+    let window = windows.get_primary().expect("no primary window");
+
+    if let Some(curs_pos) = window.cursor_position() {
+        let camera = camera.single();
+        let curs_pos = util::screen_to_world(curs_pos, window, camera);
+        let dir = curs_pos - player.translation.truncate();
+        let angle = -dir.angle_between(Vec2::X);
+
+        player.rotation = Quat::from_axis_angle(Vec3::Z, angle);
+    }
 }
 
 fn handle_start_shot(
     mouse_input: Res<Input<MouseButton>>,
-    windows: Res<Windows>,
-    camera: Query<&Transform, With<Camera>>,
-    mut query: Query<(&Transform, &mut Player)>,
+    mut player: Query<(&Transform, &mut Player)>,
     mut spawn_bullet: EventWriter<BulletSpawn>,
 ) {
-    if let (player_trans, mut player) = query.single_mut()
+    if let (player_trans, mut player) = player.single_mut()
     //&& let Player::Start = *player
     && mouse_input.just_pressed(MouseButton::Left) {
         // the real game starts now
         *player = Player::Game;
 
-        let window = windows.get_primary().expect("no primary window");
-        let curs_pos = window.cursor_position().expect("no cursor");
-        let curs_pos = util::screen_to_world(curs_pos, window, camera);
-
-        let dir = curs_pos - player_trans.translation.truncate();
-        let proj_vel = PROJECTILE_SPEED * dir.normalize();
+        let dir =  player_trans.rotation * Vec3::X;
+        let proj_vel = PROJECTILE_SPEED * dir.truncate().normalize();
 
         spawn_bullet.send(BulletSpawn {
             velocity: Velocity(proj_vel),

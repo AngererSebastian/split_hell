@@ -164,7 +164,7 @@ fn bullet_collide(
 
             vel.0 = util::vector_at_angle(vel_magnitude, PI + angle / 2.0);
             bullet.0.reset(); // reset timer
-            let vel = Velocity(util::mirror_vector(vel.0, side));
+            let vel = Velocity(util::mirror_vector(vel.0, norm));
 
             spawn_bullet(&mut cmds, vel, *bul_trans);
         }

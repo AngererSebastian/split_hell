@@ -111,7 +111,7 @@ fn projection_bounds(edge: Vec2, ps: &[Vec2]) -> (f32, f32) {
 #[cfg(test)]
 mod tests {
     use super::Collider;
-    use bevy::{prelude::*, utils::HashSet};
+    use bevy::prelude::*;
 
     #[test]
     fn not_colliding() {

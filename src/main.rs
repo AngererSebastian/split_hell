@@ -162,7 +162,8 @@ fn bullet_collide(
             let side = norm.perp();
             let angle = vel.0.angle_between(side);
 
-            vel.0 = util::vector_at_angle(vel_magnitude, PI + angle / 2.0);
+            let dir = bevy::math::Mat2::from_angle(angle / 2.0) * side;
+            vel.0 = vel_magnitude * dir.normalize();
             bullet.0.reset(); // reset timer
             let vel = Velocity(util::mirror_vector(vel.0, norm));
 

@@ -23,7 +23,8 @@ enum Player {
 }
 
 const BULLET_SIZE: Vec2 = const_vec2!([10.0, 10.0]);
-const BULLET_ACTIVATION_TIME: Duration = Duration::from_millis(180);
+// TODO: add a better system to replace this delay
+const BULLET_ACTIVATION_TIME: Duration = Duration::from_millis(70);
 
 fn main() {
     App::new()
@@ -115,15 +116,19 @@ fn bullet_collide(
             let vel_magnitude = vel.0.length();
             let side = norm.perp();
             let angle = vel.0.angle_between(side);
-            let co_angle = PI - angle;
 
-            vel.0 = vector_at_angle(vel_magnitude, angle);
+            vel.0 = vector_at_angle(vel_magnitude, PI + angle / 2.0);
             bullet.0.reset(); // reset timer
-            let vel = Velocity(vector_at_angle(vel_magnitude, co_angle));
+            let vel = Velocity(mirror_vector(vel.0, side));
 
             spawn_bullet(&mut cmds, vel, *bul_trans);
         }
     })
+}
+
+fn mirror_vector(vec: Vec2, norm: Vec2) -> Vec2 {
+    // https://stackoverflow.com/questions/56274674/how-to-mirror-a-vector-along-a-surface
+    vec - 2.0 * vec.dot(norm) * norm
 }
 
 fn vector_at_angle(magnitude: f32, angle: f32) -> Vec2 {

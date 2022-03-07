@@ -27,6 +27,8 @@ enum Player {
 const BULLET_SIZE: Vec2 = const_vec2!([10.0, 10.0]);
 // TODO: add a better system to replace this delay
 const BULLET_ACTIVATION_TIME: Duration = Duration::from_millis(70);
+const OBSTACLE_SIZE_A: f32 = 500.0;
+const OBSTACLE_SIZE_B: f32 = 20.0;
 
 fn main() {
     App::new()
@@ -79,18 +81,60 @@ fn setup(mut cmds: Commands) {
     .insert(Collider::rectangle(player_size))
     .insert(Player::Start);
 
-    //obstacle
-    let obstacle_size = Vec2::new(20.0, 100.0);
+    //obstacle left
+    let obstacle_size_vert = Vec2::new(OBSTACLE_SIZE_B, OBSTACLE_SIZE_A);
+    let obstacle_size_hor = Vec2::new(OBSTACLE_SIZE_A, OBSTACLE_SIZE_B);
+    let half_a = OBSTACLE_SIZE_A / 2.0;
+
     cmds.spawn_bundle(SpriteBundle {
         sprite: Sprite {
             color: Color::rgb(0.0, 1.0, 0.0),
-            custom_size: Some(obstacle_size),
+            custom_size: Some(obstacle_size_vert),
             ..Default::default()
         },
-        transform: Transform::from_translation(Vec3::new(40.0, 0.0, 1.0)),
+        transform: Transform::from_translation(Vec3::new(half_a, 0.0, 1.0)),
         ..Default::default()
     })
-    .insert(Collider::rectangle(obstacle_size))
+    .insert(Collider::rectangle(obstacle_size_vert))
+    .insert(Obstacle);
+
+    // obstacle right
+    cmds.spawn_bundle(SpriteBundle {
+        sprite: Sprite {
+            color: Color::rgb(0.0, 1.0, 0.0),
+            custom_size: Some(obstacle_size_vert),
+            ..Default::default()
+        },
+        transform: Transform::from_translation(Vec3::new(-half_a, 0.0, 1.0)),
+        ..Default::default()
+    })
+    .insert(Collider::rectangle(obstacle_size_vert))
+    .insert(Obstacle);
+
+    // obstacle top
+    cmds.spawn_bundle(SpriteBundle {
+        sprite: Sprite {
+            color: Color::rgb(0.0, 1.0, 0.0),
+            custom_size: Some(obstacle_size_hor),
+            ..Default::default()
+        },
+        transform: Transform::from_translation(Vec3::new(0.0, -half_a, 1.0)),
+        ..Default::default()
+    })
+    .insert(Collider::rectangle(obstacle_size_hor))
+    .insert(Obstacle);
+
+    // obstacle bottom
+    cmds.spawn_bundle(SpriteBundle {
+        sprite: Sprite {
+            color: Color::rgb(0.0, 1.0, 0.0),
+            custom_size: Some(obstacle_size_hor),
+            ..Default::default()
+        },
+        transform: Transform::from_translation(Vec3::new(0.0, half_a, 1.0)),
+        ..Default::default()
+    })
+    .insert(Collider::rectangle(obstacle_size_hor))
     .insert(Obstacle);
 
     // Camera
@@ -113,7 +157,6 @@ fn bullet_collide(
             .filter_map(|obstacle| collider::are_colliding((bul_col, &bul_trans), obstacle))
             .next();
 
-        // TODO: maybe add a spawn delay
         if let Some((norm, _)) = collision {
             let vel_magnitude = vel.0.length();
             let side = norm.perp();
@@ -139,7 +182,6 @@ fn bullet_hits_player(
         bullet.0.finished() && collider::are_colliding((col, trans), player).is_some()
     });
 
-    // TODO: create a delay before the bullet can kill
     if hit {
         println!("hit!! call an ambulance");
     }

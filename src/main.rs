@@ -3,7 +3,6 @@
 mod collider;
 mod util;
 
-use std::f32::consts::PI;
 use std::time::Duration;
 
 use bevy::math::const_vec2;
@@ -81,6 +80,7 @@ fn setup(mut cmds: Commands) {
     .insert(Collider::rectangle(player_size))
     .insert(Player::Start);
 
+    // TODO: use hexagons as boundary
     //obstacle left
     let obstacle_size_vert = Vec2::new(OBSTACLE_SIZE_B, OBSTACLE_SIZE_A);
     let obstacle_size_hor = Vec2::new(OBSTACLE_SIZE_A, OBSTACLE_SIZE_B);
@@ -141,10 +141,12 @@ fn setup(mut cmds: Commands) {
     cmds.spawn_bundle(OrthographicCameraBundle::new_2d());
 }
 
+type IsObstacleQuery = (With<Obstacle>, Without<Bullet>);
+
 fn bullet_collide(
     mut cmds: Commands,
     mut bullets: Query<(&mut Velocity, &Transform, &mut Bullet, &Collider), Without<Obstacle>>,
-    obstacles: Query<(&Collider, &Transform), (With<Obstacle>, Without<Bullet>)>,
+    obstacles: Query<(&Collider, &Transform), IsObstacleQuery>,
 ) {
     bullets.for_each_mut(|(mut vel, bul_trans, mut bullet, bul_col)| {
         // wait a certain time before detecting collisions
@@ -154,8 +156,7 @@ fn bullet_collide(
 
         let collision = obstacles
             .iter()
-            .filter_map(|obstacle| collider::are_colliding((bul_col, &bul_trans), obstacle))
-            .next();
+            .find_map(|obstacle| collider::are_colliding((bul_col, bul_trans), obstacle));
 
         if let Some((norm, _)) = collision {
             let vel_magnitude = vel.0.length();

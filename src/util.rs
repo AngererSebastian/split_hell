@@ -12,7 +12,7 @@ pub fn mirror_vector(vec: Vec2, norm: Vec2) -> Vec2 {
 
 /// creates an vector with the given magnitude and
 /// the given angle on the x-axis
-pub fn vector_at_angle(magnitude: f32, angle: f32) -> Vec2 {
+pub fn _vector_at_angle(magnitude: f32, angle: f32) -> Vec2 {
     magnitude * Vec2::new(angle.cos(), angle.sin())
 }
 
@@ -48,7 +48,7 @@ mod tests {
     fn degrees_90() {
         let expected = Vec2::Y;
 
-        let result = super::vector_at_angle(1.0, PI / 2.0);
+        let result = super::_vector_at_angle(1.0, PI / 2.0);
 
         assert!(
             vec_equal(expected, result),

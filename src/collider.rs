@@ -29,14 +29,11 @@ pub fn are_colliding(
     let points_a = points_to_world(&col_a.0, trans_a);
     let points_b = points_to_world(&col_b.0, trans_b);
 
-    let edges_a: Vec<_> = edges_between(&points_a).collect();
-    let edges_b: Vec<_> = edges_between(&points_b).collect();
+    let edges_a = edges_between(&points_a);
+    let edges_b = edges_between(&points_b);
 
-    let mut overlaps = get_overlaps(edges_a.into_iter(), &points_a, &points_b).chain(get_overlaps(
-        edges_b.into_iter(),
-        &points_a,
-        &points_b,
-    ));
+    let mut overlaps = get_overlaps(edges_a, &points_a, &points_b)
+        .chain(get_overlaps(edges_b, &points_a, &points_b));
 
     let first = overlaps.next().expect("oneagon?");
 
@@ -82,8 +79,8 @@ fn get_overlaps<'a, I: Iterator<Item = Vec2> + 'a>(
 ) -> impl Iterator<Item = (Vec2, f32)> + 'a {
     edges.map(move |e| {
         let e = e.perp().normalize();
-        let (a_min, a_max) = projection_bounds(e, &points_a);
-        let (b_min, b_max) = projection_bounds(e, &points_b);
+        let (a_min, a_max) = projection_bounds(e, points_a);
+        let (b_min, b_max) = projection_bounds(e, points_b);
 
         //a_min <= b_max && a_max >= b_min
 

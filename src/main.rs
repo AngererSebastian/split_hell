@@ -9,13 +9,21 @@ use bevy::math::const_vec2;
 use bevy::{prelude::*, render::camera::Camera};
 use collider::Collider;
 
-#[derive(Component, Debug, Default)]
+#[derive(Component, Debug, Default, Clone, Copy)]
 struct Velocity(Vec2);
 
 #[derive(Component, Debug)]
 struct Obstacle;
 #[derive(Component, Debug)]
 struct Bullet(Timer);
+
+struct BulletSpawn {
+    velocity: Velocity,
+    transform: Transform,
+}
+
+#[derive(Default)]
+struct BulletCount(u8);
 
 #[derive(Component, Debug)]
 enum Player {
@@ -24,6 +32,7 @@ enum Player {
 }
 
 const BULLET_SIZE: Vec2 = const_vec2!([10.0, 10.0]);
+const MAX_BULLETS: u8 = 100;
 // TODO: add a better system to replace this delay
 const BULLET_ACTIVATION_TIME: Duration = Duration::from_millis(70);
 const OBSTACLE_SIZE_A: f32 = 500.0;
@@ -32,6 +41,8 @@ const OBSTACLE_SIZE_B: f32 = 20.0;
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
+        .init_resource::<BulletCount>()
+        .add_event::<BulletSpawn>()
         .add_startup_system(setup)
         .add_system(handle_movement)
         .add_system(move_transform)
@@ -39,22 +50,36 @@ fn main() {
         .add_system(bullet_collide)
         .add_system(bullet_hits_player)
         .add_system(advance_bullet_time)
+        .add_system(spawn_bullets)
         .run();
 }
 
-fn spawn_bullet(cmds: &mut Commands, vel: Velocity, transform: Transform) {
-    cmds.spawn_bundle(SpriteBundle {
-        sprite: Sprite {
-            color: Color::BLACK,
-            custom_size: Some(BULLET_SIZE),
+fn spawn_bullets(
+    mut cmds: Commands,
+    mut bullet_count: ResMut<BulletCount>,
+    mut bullets: EventReader<BulletSpawn>,
+) {
+    for b in bullets.iter() {
+        // spawn no more
+        if bullet_count.0 > MAX_BULLETS {
+            break;
+        }
+
+        cmds.spawn_bundle(SpriteBundle {
+            sprite: Sprite {
+                color: Color::BLACK,
+                custom_size: Some(BULLET_SIZE),
+                ..Default::default()
+            },
+            transform: b.transform,
             ..Default::default()
-        },
-        transform,
-        ..Default::default()
-    })
-    .insert(Collider::rectangle(BULLET_SIZE))
-    .insert(Bullet(Timer::new(BULLET_ACTIVATION_TIME, false)))
-    .insert(vel);
+        })
+        .insert(Collider::rectangle(BULLET_SIZE))
+        .insert(Bullet(Timer::new(BULLET_ACTIVATION_TIME, false)))
+        .insert(b.velocity);
+
+        bullet_count.0 += 1;
+    }
 }
 
 fn advance_bullet_time(time: Res<Time>, mut bullets: Query<&mut Bullet>) {
@@ -144,9 +169,9 @@ fn setup(mut cmds: Commands) {
 type IsObstacleQuery = (With<Obstacle>, Without<Bullet>);
 
 fn bullet_collide(
-    mut cmds: Commands,
     mut bullets: Query<(&mut Velocity, &Transform, &mut Bullet, &Collider), Without<Obstacle>>,
     obstacles: Query<(&Collider, &Transform), IsObstacleQuery>,
+    mut spawn_bullet: EventWriter<BulletSpawn>,
 ) {
     bullets.for_each_mut(|(mut vel, bul_trans, mut bullet, bul_col)| {
         // wait a certain time before detecting collisions
@@ -166,9 +191,12 @@ fn bullet_collide(
             let dir = bevy::math::Mat2::from_angle(angle / 2.0) * side;
             vel.0 = vel_magnitude * dir.normalize();
             bullet.0.reset(); // reset timer
-            let vel = Velocity(util::mirror_vector(vel.0, norm));
+            let velocity = Velocity(util::mirror_vector(vel.0, norm));
 
-            spawn_bullet(&mut cmds, vel, *bul_trans);
+            spawn_bullet.send(BulletSpawn {
+                velocity,
+                transform: *bul_trans,
+            })
         }
     })
 }
@@ -225,11 +253,11 @@ fn handle_movement(
 }
 
 fn handle_start_shot(
-    mut cmds: Commands,
     mouse_input: Res<Input<MouseButton>>,
     windows: Res<Windows>,
     camera: Query<&Transform, With<Camera>>,
     mut query: Query<(&Transform, &mut Player)>,
+    mut spawn_bullet: EventWriter<BulletSpawn>,
 ) {
     if let (player_trans, mut player) = query.single_mut()
     //&& let Player::Start = *player
@@ -244,6 +272,9 @@ fn handle_start_shot(
         let dir = curs_pos - player_trans.translation.truncate();
         let proj_vel = PROJECTILE_SPEED * dir.normalize();
 
-        spawn_bullet(&mut cmds, Velocity(proj_vel), *player_trans);
+        spawn_bullet.send(BulletSpawn {
+            velocity: Velocity(proj_vel),
+            transform: *player_trans,
+        })
     }
 }

@@ -1,6 +1,8 @@
 #![feature(let_chains)]
 
 mod collider;
+mod util;
+
 use std::f32::consts::PI;
 use std::time::Duration;
 
@@ -117,22 +119,13 @@ fn bullet_collide(
             let side = norm.perp();
             let angle = vel.0.angle_between(side);
 
-            vel.0 = vector_at_angle(vel_magnitude, PI + angle / 2.0);
+            vel.0 = util::vector_at_angle(vel_magnitude, PI + angle / 2.0);
             bullet.0.reset(); // reset timer
-            let vel = Velocity(mirror_vector(vel.0, side));
+            let vel = Velocity(util::mirror_vector(vel.0, side));
 
             spawn_bullet(&mut cmds, vel, *bul_trans);
         }
     })
-}
-
-fn mirror_vector(vec: Vec2, norm: Vec2) -> Vec2 {
-    // https://stackoverflow.com/questions/56274674/how-to-mirror-a-vector-along-a-surface
-    vec - 2.0 * vec.dot(norm) * norm
-}
-
-fn vector_at_angle(magnitude: f32, angle: f32) -> Vec2 {
-    magnitude * Vec2::new(angle.cos(), angle.sin())
 }
 
 fn bullet_hits_player(
@@ -202,23 +195,11 @@ fn handle_start_shot(
 
         let window = windows.get_primary().expect("no primary window");
         let curs_pos = window.cursor_position().expect("no cursor");
-        let curs_pos = screen_to_world(curs_pos, window, camera);
+        let curs_pos = util::screen_to_world(curs_pos, window, camera);
 
         let dir = curs_pos - player_trans.translation.truncate();
         let proj_vel = PROJECTILE_SPEED * dir.normalize();
 
         spawn_bullet(&mut cmds, Velocity(proj_vel), *player_trans);
     }
-}
-
-fn screen_to_world(screen: Vec2, window: &Window, camera: Query<&Transform, With<Camera>>) -> Vec2 {
-    let w_size = Vec2::new(window.width() as f32, window.height() as f32);
-
-    let pos = screen - (w_size / 2.0);
-
-    let transform_matrix = camera.single().compute_matrix();
-
-    let world = transform_matrix * pos.extend(0.0).extend(1.0);
-
-    world.truncate().truncate()
 }

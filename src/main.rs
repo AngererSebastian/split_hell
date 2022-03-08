@@ -3,6 +3,7 @@
 mod collider;
 mod util;
 
+use std::f32::consts::PI;
 use std::time::Duration;
 
 use bevy::math::const_vec2;
@@ -45,7 +46,6 @@ fn main() {
         .add_event::<BulletSpawn>()
         .add_startup_system(setup)
         .add_system(handle_movement)
-        .add_system(handle_player_looking)
         .add_system(move_transform)
         .add_system(handle_start_shot)
         .add_system(bullet_collide)
@@ -100,6 +100,7 @@ fn setup(mut cmds: Commands) {
             custom_size: Some(player_size),
             ..Default::default()
         },
+        transform: Transform::from_rotation(Quat::from_rotation_z(PI / 2.0)),
         ..Default::default()
     })
     .insert(Velocity::default())
@@ -234,47 +235,34 @@ fn handle_movement(
     mut query: Query<&mut Transform, With<Player>>,
 ) {
     let mut tran = query.single_mut();
-    let mut x = 0.0;
-    let mut y = 0.0;
+    let mut sign = 0.0;
+    let mut jaw = 0.0;
 
     if keyboard.pressed(KeyCode::A) {
-        y -= 1.0;
+        jaw += 1.0;
     }
     if keyboard.pressed(KeyCode::D) {
-        y += 1.0;
+        jaw -= 1.0;
     }
     if keyboard.pressed(KeyCode::S) {
-        x -= 1.0;
+        sign -= 1.0;
     }
     if keyboard.pressed(KeyCode::W) {
-        x += 1.0;
+        sign += 1.0;
     }
 
-    let movement_dir = tran.rotation * Vec3::new(x, y, 0.0);
+    jaw *= 0.1;
+
+    tran.rotate(Quat::from_rotation_z(jaw));
+    let movement_dir = sign * (tran.rotation * Vec3::Y);
     tran.translation += WALK_SPEED * time.delta_seconds() * movement_dir;
-}
-
-fn handle_player_looking(
-    windows: Res<Windows>,
-    camera: Query<&Transform, (With<Camera>, Without<Player>)>,
-    mut player: Query<&mut Transform, With<Player>>,
-) {
-    let mut player = player.single_mut();
-    let window = windows.get_primary().expect("no primary window");
-
-    if let Some(curs_pos) = window.cursor_position() {
-        let camera = camera.single();
-        let curs_pos = util::screen_to_world(curs_pos, window, camera);
-        let dir = curs_pos - player.translation.truncate();
-        let angle = -dir.angle_between(Vec2::X);
-
-        player.rotation = Quat::from_axis_angle(Vec3::Z, angle);
-    }
 }
 
 fn handle_start_shot(
     mouse_input: Res<Input<MouseButton>>,
     mut player: Query<(&Transform, &mut Player)>,
+    windows: Res<Windows>,
+    camera: Query<&Transform, (With<Camera>, Without<Player>)>,
     mut spawn_bullet: EventWriter<BulletSpawn>,
 ) {
     if let (player_trans, mut player) = player.single_mut()
@@ -283,8 +271,12 @@ fn handle_start_shot(
         // the real game starts now
         *player = Player::Game;
 
-        let dir =  player_trans.rotation * Vec3::X;
-        let proj_vel = PROJECTILE_SPEED * dir.truncate().normalize();
+        let camera = camera.single();
+        let window = windows.get_primary().expect("no primary window");
+        let curs_pos = window.cursor_position().expect("clicking with no cursor?");
+        let curs_pos = util::screen_to_world(curs_pos, window, camera);
+        let dir = curs_pos - player_trans.translation.truncate();
+        let proj_vel = PROJECTILE_SPEED * dir.normalize();
 
         spawn_bullet.send(BulletSpawn {
             velocity: Velocity(proj_vel),

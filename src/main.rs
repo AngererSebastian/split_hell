@@ -33,17 +33,17 @@ enum Player {
 }
 
 const BULLET_SIZE: Vec2 = const_vec2!([10.0, 10.0]);
-const MAX_BULLETS: u8 = 100;
+const MAX_BULLETS: u8 = 254;
 // TODO: add a better system to replace this delay
 const BULLET_ACTIVATION_TIME: Duration = Duration::from_millis(70);
-const OBSTACLE_SIZE_A: f32 = 500.0;
-const OBSTACLE_SIZE_B: f32 = 20.0;
+const OBSTACLE_WIDTH: f32 = 20.0;
 
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
         .init_resource::<BulletCount>()
         .add_event::<BulletSpawn>()
+        .add_startup_system(setup_border)
         .add_startup_system(setup)
         .add_system(handle_movement)
         .add_system(move_transform)
@@ -107,67 +107,40 @@ fn setup(mut cmds: Commands) {
     .insert(Collider::rectangle(player_size))
     .insert(Player::Start);
 
-    // TODO: use hexagons as boundary
-    //obstacle left
-    let obstacle_size_vert = Vec2::new(OBSTACLE_SIZE_B, OBSTACLE_SIZE_A);
-    let obstacle_size_hor = Vec2::new(OBSTACLE_SIZE_A, OBSTACLE_SIZE_B);
-    let half_a = OBSTACLE_SIZE_A / 2.0;
-
-    cmds.spawn_bundle(SpriteBundle {
-        sprite: Sprite {
-            color: Color::rgb(0.0, 1.0, 0.0),
-            custom_size: Some(obstacle_size_vert),
-            ..Default::default()
-        },
-        transform: Transform::from_translation(Vec3::new(half_a, 0.0, 1.0)),
-        ..Default::default()
-    })
-    .insert(Collider::rectangle(obstacle_size_vert))
-    .insert(Obstacle);
-
-    // obstacle right
-    cmds.spawn_bundle(SpriteBundle {
-        sprite: Sprite {
-            color: Color::rgb(0.0, 1.0, 0.0),
-            custom_size: Some(obstacle_size_vert),
-            ..Default::default()
-        },
-        transform: Transform::from_translation(Vec3::new(-half_a, 0.0, 1.0)),
-        ..Default::default()
-    })
-    .insert(Collider::rectangle(obstacle_size_vert))
-    .insert(Obstacle);
-
-    // obstacle top
-    cmds.spawn_bundle(SpriteBundle {
-        sprite: Sprite {
-            color: Color::rgb(0.0, 1.0, 0.0),
-            custom_size: Some(obstacle_size_hor),
-            ..Default::default()
-        },
-        transform: Transform::from_translation(Vec3::new(0.0, -half_a, 1.0)),
-        ..Default::default()
-    })
-    .insert(Collider::rectangle(obstacle_size_hor))
-    .insert(Obstacle);
-
-    // obstacle bottom
-    cmds.spawn_bundle(SpriteBundle {
-        sprite: Sprite {
-            color: Color::rgb(0.0, 1.0, 0.0),
-            custom_size: Some(obstacle_size_hor),
-            ..Default::default()
-        },
-        transform: Transform::from_translation(Vec3::new(0.0, half_a, 1.0)),
-        ..Default::default()
-    })
-    .insert(Collider::rectangle(obstacle_size_hor))
-    .insert(Obstacle);
-
     // Camera
     cmds.spawn_bundle(OrthographicCameraBundle::new_2d());
 }
 
+fn setup_border(mut cmds: Commands) {
+    let radius = 250.0f32; // center to a vertex
+    let side = (3.0 * radius * radius).sqrt(); // side of the hexagon
+    dbg!(side);
+    let segment = Vec2::new(OBSTACLE_WIDTH, side);
+    let to_side = (radius * radius + side * side / 4.0).sqrt();
+
+    let side_rot = Quat::from_rotation_z(60.0f32.to_radians());
+    let mut distance = (to_side + OBSTACLE_WIDTH / 2.0) * Vec3::X;
+
+    for i in 0..6 {
+        cmds.spawn_bundle(SpriteBundle {
+            sprite: Sprite {
+                color: Color::GREEN,
+                custom_size: Some(segment),
+                ..Default::default()
+            },
+            transform: Transform {
+                translation: distance,
+                rotation: Quat::from_rotation_z(i as f32 * 60.0f32.to_radians()),
+                ..Default::default()
+            },
+            ..Default::default()
+        })
+        .insert(Obstacle)
+        .insert(Collider::rectangle(segment));
+
+        distance = side_rot * distance;
+    }
+}
 type IsObstacleQuery = (With<Obstacle>, Without<Bullet>);
 
 fn bullet_collide(
@@ -186,12 +159,13 @@ fn bullet_collide(
             .find_map(|obstacle| collider::are_colliding((bul_col, bul_trans), obstacle));
 
         if let Some((norm, _)) = collision {
-            let vel_magnitude = vel.0.length();
-            let side = norm.perp();
-            let angle = vel.0.angle_between(side);
+            //let vel_magnitude = vel.0.length();
+            //let side = norm.perp();
+            //let angle = vel.0.angle_between(side);
 
-            let dir = bevy::math::Mat2::from_angle(angle / 2.0) * side;
-            vel.0 = vel_magnitude * dir.normalize();
+            //let dir = bevy::math::Mat2::from_angle(angle / 2.0) * side;
+            //vel.0 = vel_magnitude * dir.normalize();
+            vel.0 = util::reflect_vector(vel.0, norm);
             bullet.0.reset(); // reset timer
             let velocity = Velocity(util::mirror_vector(vel.0, norm));
 

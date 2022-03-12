@@ -36,7 +36,7 @@ const BULLET_SIZE: Vec2 = const_vec2!([10.0, 10.0]);
 const MAX_BULLETS: u8 = 254;
 // TODO: add a better system to replace this delay
 const BULLET_ACTIVATION_TIME: Duration = Duration::from_millis(70);
-const OBSTACLE_WIDTH: f32 = 20.0;
+const OBSTACLE_WIDTH: f32 = 60.0;
 
 fn main() {
     App::new()
@@ -49,6 +49,7 @@ fn main() {
         .add_system(move_transform)
         .add_system(handle_start_shot)
         .add_system(bullet_collide)
+        .add_system(border_collide)
         .add_system(bullet_hits_player)
         .add_system(advance_bullet_time)
         .add_system(spawn_bullets)
@@ -141,24 +142,25 @@ fn setup_border(mut cmds: Commands) {
         distance = side_rot * distance;
     }
 }
-type IsObstacleQuery = (With<Obstacle>, Without<Bullet>);
+type IsObstacleQuery = (With<Obstacle>, Without<Bullet>, Without<Player>);
 
 fn bullet_collide(
-    mut bullets: Query<(&mut Velocity, &Transform, &mut Bullet, &Collider), Without<Obstacle>>,
+    mut bullets: Query<(&mut Velocity, &mut Transform, &mut Bullet, &Collider), Without<Obstacle>>,
     obstacles: Query<(&Collider, &Transform), IsObstacleQuery>,
     mut spawn_bullet: EventWriter<BulletSpawn>,
 ) {
-    bullets.for_each_mut(|(mut vel, bul_trans, mut bullet, bul_col)| {
+    bullets.for_each_mut(|(mut vel, mut bul_trans, mut bullet, bul_col)| {
         // wait a certain time before detecting collisions
-        if !bullet.0.finished() {
-            return;
-        }
+        // if !bullet.0.finished() {
+        //     return;
+        // }
 
         let collision = obstacles
             .iter()
-            .find_map(|obstacle| collider::are_colliding((bul_col, bul_trans), obstacle));
+            .find_map(|obstacle| collider::are_colliding(obstacle, (bul_col, &bul_trans)));
 
-        if let Some((norm, _)) = collision {
+        if let Some((norm, magnitude)) = collision {
+            bul_trans.translation += magnitude * norm.extend(0.0);
             //let vel_magnitude = vel.0.length();
             //let side = norm.perp();
             //let angle = vel.0.angle_between(side);
@@ -191,6 +193,19 @@ fn bullet_hits_player(
     if hit {
         println!("hit!! call an ambulance");
     }
+}
+
+fn border_collide(
+    mut player: Query<(&Collider, &mut Transform), With<Player>>,
+    obstacles: Query<(&Collider, &Transform), IsObstacleQuery>,
+) {
+    let (p_col, mut p_trans) = player.single_mut();
+
+    obstacles.for_each(|obs| {
+        if let Some((dir, mag)) = collider::are_colliding(obs, (p_col, &p_trans)) {
+            p_trans.translation += mag * dir.extend(0.0);
+        }
+    })
 }
 
 fn move_transform(time: Res<Time>, mut query: Query<(&Velocity, &mut Transform)>) {

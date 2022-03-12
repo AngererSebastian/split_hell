@@ -40,7 +40,7 @@ pub fn are_colliding(
     overlaps.fold(
         Some(first),
         |min_overlap: Option<(Vec2, f32)>, (axis, overlap)| {
-            if overlap < 0.0 {
+            if overlap <= 0.0 {
                 None
             } else {
                 min_overlap.map(|(back_axis, min_ov)| {
@@ -94,12 +94,10 @@ fn get_overlaps<'a, I: Iterator<Item = Vec2> + 'a>(
     })
 }
 
-fn projection_bounds(edge: Vec2, ps: &[Vec2]) -> (f32, f32) {
-    ps.iter()
-        .map(|p| {
-            // perpendicular of edge and then the dot product with p
-            edge.dot(*p)
-        })
+fn projection_bounds(norm: Vec2, points: &[Vec2]) -> (f32, f32) {
+    points
+        .iter()
+        .map(|p| norm.dot(*p))
         .minmax()
         .into_option()
         .unwrap_or((0.0, 0.0))
@@ -133,6 +131,23 @@ mod tests {
         assert!(
             super::are_colliding((&a, &ta), (&b, &tb)).is_some(),
             "Colliders are colliding"
+        )
+    }
+
+    #[test]
+    fn correct_collision() {
+        let a = Collider::rectangle(10.0 * Vec2::ONE);
+        let b = Collider::rectangle(10.0 * Vec2::ONE);
+        let ta = Transform::default();
+        let mut tb = Transform::from_translation(Vec3::new(5.0, 5.0, 0.0));
+
+        let (dir, mag) = super::are_colliding((&a, &ta), (&b, &tb)).unwrap();
+
+        tb.translation += mag * dir.extend(0.0);
+
+        assert!(
+            dbg!(super::are_colliding((&a, &ta), (&b, &tb))).is_none(),
+            "Corrected the collision"
         )
     }
 

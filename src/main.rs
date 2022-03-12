@@ -209,26 +209,23 @@ fn handle_movement(
     mut query: Query<&mut Transform, With<Player>>,
 ) {
     let mut tran = query.single_mut();
-    let mut sign = 0.0;
-    let mut jaw = 0.0;
+    let mut x = 0.0;
+    let mut y = 0.0;
 
     if keyboard.pressed(KeyCode::A) {
-        jaw += 1.0;
+        x -= 1.0;
     }
     if keyboard.pressed(KeyCode::D) {
-        jaw -= 1.0;
+        x += 1.0;
     }
     if keyboard.pressed(KeyCode::S) {
-        sign -= 1.0;
+        y -= 1.0;
     }
     if keyboard.pressed(KeyCode::W) {
-        sign += 1.0;
+        y += 1.0;
     }
 
-    jaw *= 0.1;
-
-    tran.rotate(Quat::from_rotation_z(jaw));
-    let movement_dir = sign * (tran.rotation * Vec3::Y);
+    let movement_dir = Vec3::new(x, y, 0.);
     tran.translation += WALK_SPEED * time.delta_seconds() * movement_dir;
 }
 

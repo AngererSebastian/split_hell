@@ -1,11 +1,12 @@
 use bevy::prelude::*;
 
-/// mirrors an vector along an side
+/// reflect an vector along an norm
 pub fn reflect_vector(vec: Vec2, norm: Vec2) -> Vec2 {
     // https://stackoverflow.com/questions/56274674/how-to-mirror-a-vector-along-a-surface
     vec - 2.0 * vec.dot(norm) * norm
 }
 
+/// mirror an vector along an norm
 pub fn mirror_vector(vec: Vec2, norm: Vec2) -> Vec2 {
     -reflect_vector(vec, norm)
 }

@@ -22,6 +22,9 @@ impl Collider {
     }
 }
 
+/// look if a is colliding with b and
+/// return the normalized direction and length to get b out of a
+/// if they are colliding
 pub fn are_colliding(
     (col_a, trans_a): (&Collider, &Transform),
     (col_b, trans_b): (&Collider, &Transform),
@@ -55,6 +58,7 @@ pub fn are_colliding(
     )
 }
 
+/// applies the transform to the points
 fn points_to_world(ps: &[Vec2], trans: &Transform) -> Vec<Vec2> {
     ps.iter()
         .map(|p| *trans * p.extend(0.0))
@@ -63,6 +67,8 @@ fn points_to_world(ps: &[Vec2], trans: &Transform) -> Vec<Vec2> {
         .collect()
 }
 
+/// get the edges between those points,
+/// assumes the 1st point is connected to the second and the last to the first
 fn edges_between(ps: &[Vec2]) -> impl Iterator<Item = Vec2> + '_ {
     let initial = *ps.last().expect("Nonagon infinity ?");
     ps.iter().scan(initial, |prev: &mut Vec2, p| {
@@ -72,6 +78,7 @@ fn edges_between(ps: &[Vec2]) -> impl Iterator<Item = Vec2> + '_ {
     })
 }
 
+/// get the overlaps between the points of the colliders projected on the edges
 fn get_overlaps<'a, I: Iterator<Item = Vec2> + 'a>(
     edges: I,
     points_a: &'a [Vec2],
@@ -94,6 +101,7 @@ fn get_overlaps<'a, I: Iterator<Item = Vec2> + 'a>(
     })
 }
 
+/// get the minimun and max position of the projection of norm and every point
 fn projection_bounds(norm: Vec2, points: &[Vec2]) -> (f32, f32) {
     points
         .iter()
@@ -150,19 +158,4 @@ mod tests {
             "Corrected the collision"
         )
     }
-
-    /*#[test]
-    fn get_edges() {
-        let a = Collider::rectangle(10.0 * Vec2::ONE);
-        let edges = HashSet::from([
-            Vec2::new(0.0, -10.0),
-            Vec2::new(10.0, 0.0),
-            Vec2::new(0.0, 10.0),
-            Vec2::new(-10.0, 0.0),
-        ]);
-
-        let result: HashSet<_> = super::edges_between(&a.0).collect();
-
-        assert_eq!(edges, result, "Doesn't calculate the right edges")
-    }*/
 }

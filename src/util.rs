@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use bevy::prelude::*;
 
 /// reflect an vector along an norm
@@ -28,6 +30,15 @@ pub fn screen_to_world(screen: Vec2, window: &Window, camera: &Transform) -> Vec
     let world = transform_matrix * pos.extend(0.0).extend(1.0);
 
     world.truncate().truncate()
+}
+
+pub fn display_duration(dur: Duration) -> String {
+    let sec = dur.as_secs();
+    let min = sec / 60;
+    let sec = sec % 60;
+    let millis = dur.subsec_millis();
+
+    format!("{:02}:{:02}:{:03}", min, sec, millis)
 }
 
 #[cfg(test)]

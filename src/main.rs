@@ -6,13 +6,16 @@ mod util;
 use std::f32::consts::PI;
 use std::time::Duration;
 
+use bevy::core::Stopwatch;
 use bevy::math::const_vec2;
-use bevy::{prelude::*, render::camera::Camera};
+use bevy::prelude::*;
 use collider::Collider;
 
 #[derive(Component, Debug, Default, Clone, Copy)]
 struct Velocity(Vec2);
 
+#[derive(Component, Debug)]
+struct MainCamera;
 #[derive(Component, Debug)]
 struct Obstacle;
 #[derive(Component, Debug)]
@@ -29,13 +32,14 @@ struct BulletCount(u8);
 #[derive(Component, Debug)]
 enum Player {
     Start,
-    Game,
+    Game(Stopwatch),
+    GameOver(Duration),
 }
 
 const BULLET_SIZE: Vec2 = const_vec2!([10.0, 10.0]);
 const MAX_BULLETS: u8 = 254;
 // TODO: add a better system to replace this delay
-const BULLET_ACTIVATION_TIME: Duration = Duration::from_millis(70);
+const BULLET_ACTIVATION_TIME: Duration = Duration::from_millis(120);
 const OBSTACLE_WIDTH: f32 = 60.0;
 
 fn main() {
@@ -45,6 +49,8 @@ fn main() {
         .add_event::<BulletSpawn>()
         .add_startup_system(setup_border)
         .add_startup_system(setup)
+        .add_startup_system(setup_ui)
+        .add_system(display_timer)
         .add_system(handle_movement)
         .add_system(move_transform)
         .add_system(handle_start_shot)
@@ -54,42 +60,6 @@ fn main() {
         .add_system(advance_bullet_time)
         .add_system(spawn_bullets)
         .run();
-}
-
-fn spawn_bullets(
-    mut cmds: Commands,
-    mut bullet_count: ResMut<BulletCount>,
-    mut bullets: EventReader<BulletSpawn>,
-) {
-    for b in bullets.iter() {
-        // spawn no more
-        if bullet_count.0 > MAX_BULLETS {
-            break;
-        }
-
-        cmds.spawn_bundle(SpriteBundle {
-            sprite: Sprite {
-                color: Color::BLACK,
-                custom_size: Some(BULLET_SIZE),
-                ..Default::default()
-            },
-            transform: b.transform,
-            ..Default::default()
-        })
-        .insert(Collider::rectangle(BULLET_SIZE))
-        .insert(Bullet(Timer::new(BULLET_ACTIVATION_TIME, false)))
-        .insert(b.velocity);
-
-        bullet_count.0 += 1;
-    }
-}
-
-fn advance_bullet_time(time: Res<Time>, mut bullets: Query<&mut Bullet>) {
-    let elapsed = time.delta();
-
-    bullets.for_each_mut(|mut b| {
-        b.0.tick(elapsed);
-    })
 }
 
 fn setup(mut cmds: Commands) {
@@ -108,8 +78,37 @@ fn setup(mut cmds: Commands) {
     .insert(Collider::rectangle(player_size))
     .insert(Player::Start);
 
-    // Camera
-    cmds.spawn_bundle(OrthographicCameraBundle::new_2d());
+    // Cameras
+    cmds.spawn_bundle(OrthographicCameraBundle::new_2d())
+        .insert(MainCamera);
+}
+
+fn setup_ui(mut cmds: Commands, assets: Res<AssetServer>) {
+    cmds.spawn_bundle(UiCameraBundle::default());
+
+    println!("hello");
+    cmds.spawn_bundle(TextBundle {
+        style: Style {
+            align_self: AlignSelf::FlexEnd,
+            position_type: PositionType::Absolute,
+            position: Rect {
+                bottom: Val::Px(5.0),
+                right: Val::Px(15.0),
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        text: Text::with_section(
+            "00:00.000",
+            TextStyle {
+                font: assets.load("FiraMono-Regular.otf"),
+                font_size: 100.0,
+                color: Color::WHITE,
+            },
+            Default::default(),
+        ),
+        ..Default::default()
+    });
 }
 
 fn setup_border(mut cmds: Commands) {
@@ -142,6 +141,66 @@ fn setup_border(mut cmds: Commands) {
         distance = side_rot * distance;
     }
 }
+
+fn spawn_bullets(
+    mut cmds: Commands,
+    mut bullet_count: ResMut<BulletCount>,
+    mut bullets: EventReader<BulletSpawn>,
+) {
+    for b in bullets.iter() {
+        // spawn no more
+        if bullet_count.0 > MAX_BULLETS {
+            break;
+        }
+
+        cmds.spawn_bundle(SpriteBundle {
+            sprite: Sprite {
+                color: Color::BLACK,
+                custom_size: Some(BULLET_SIZE),
+                ..Default::default()
+            },
+            transform: b.transform,
+            ..Default::default()
+        })
+        .insert(Collider::rectangle(BULLET_SIZE))
+        .insert(Bullet(Timer::new(BULLET_ACTIVATION_TIME, false)))
+        .insert(b.velocity);
+
+        bullet_count.0 += 1;
+    }
+}
+
+fn display_timer(mut text: Query<&mut Text>, player: Query<&Player>) {
+    let mut text = text.single_mut();
+
+    match *player.single() {
+        Player::Game(ref stopwatch) => {
+            text.sections[0].value = util::display_duration(stopwatch.elapsed());
+        }
+        Player::GameOver(elapsed) => {
+            text.sections[0].value = util::display_duration(elapsed);
+        }
+        _ => (),
+    }
+}
+
+fn advance_bullet_time(
+    time: Res<Time>,
+    mut player: Query<&mut Player>,
+    mut bullets: Query<&mut Bullet>,
+) {
+    let elapsed = time.delta();
+
+    let player = player.single_mut().into_inner();
+    if let Player::Game(ref mut s) = player {
+        s.tick(elapsed);
+    }
+
+    bullets.for_each_mut(|mut b| {
+        b.0.tick(elapsed);
+    })
+}
+
 type IsObstacleQuery = (With<Obstacle>, Without<Bullet>, Without<Player>);
 
 fn bullet_collide(
@@ -180,17 +239,19 @@ fn bullet_collide(
 }
 
 fn bullet_hits_player(
-    player: Query<(&Collider, &Transform), With<Player>>,
+    mut player: Query<((&Collider, &Transform), &mut Player)>,
     bullets: Query<(&Collider, &Transform, &Bullet)>,
 ) {
     // there is only one player (for now)
-    let player = player.single();
+    let (p_collision, player) = player.single_mut();
+    let player = player.into_inner();
 
     let hit = bullets.iter().any(|(col, trans, bullet)| {
-        bullet.0.finished() && collider::are_colliding((col, trans), player).is_some()
+        bullet.0.finished() && collider::are_colliding((col, trans), p_collision).is_some()
     });
 
-    if hit {
+    if let Player::Game(ref s) = player && hit {
+        *player = Player::GameOver(s.elapsed());
         println!("hit!! call an ambulance");
     }
 }
@@ -248,14 +309,14 @@ fn handle_start_shot(
     mouse_input: Res<Input<MouseButton>>,
     mut player: Query<(&Transform, &mut Player)>,
     windows: Res<Windows>,
-    camera: Query<&Transform, (With<Camera>, Without<Player>)>,
+    camera: Query<&Transform, (With<MainCamera>, Without<Player>)>,
     mut spawn_bullet: EventWriter<BulletSpawn>,
 ) {
     if let (player_trans, mut player) = player.single_mut()
     //&& let Player::Start = *player
     && mouse_input.just_pressed(MouseButton::Left) {
         // the real game starts now
-        *player = Player::Game;
+        *player = Player::Game(Stopwatch::new());
 
         let camera = camera.single();
         let window = windows.get_primary().expect("no primary window");
